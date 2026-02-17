@@ -123,6 +123,35 @@ export async function getProductsByCategory(
 }
 
 /**
+ * Clean search query - remove price and filler words
+ * WHAT: Extract meaningful product keywords
+ * WHY: "Show me laptops under 1000" → "laptops"
+ */
+function cleanSearchQuery(query: string): string {
+  // Remove price-related words and numbers
+  const priceWords =
+    /\b(under|below|above|over|between|around|approximately|euros?|eur|€|dollars?|\$|price|budget|max|min|maximum|minimum)\b/gi;
+  const numbers = /\b\d+\b/g;
+
+  // Remove filler words
+  const fillerWords =
+    /\b(show|find|get|give|tell|looking|need|want|me|my|for|a|an|the|some|any)\b/gi;
+
+  let cleaned = query
+    .toLowerCase()
+    .replace(priceWords, " ") // Remove price words
+    .replace(numbers, " ") // Remove numbers
+    .replace(fillerWords, " ") // Remove filler words
+    .replace(/\s+/g, " ") // Collapse multiple spaces
+    .trim();
+
+  console.log("[DB] Original query:", query);
+  console.log("[DB] Cleaned query:", cleaned);
+
+  return cleaned;
+}
+
+/**
  * Search products with price filter
  *
  * WHAT: Find products within price range
@@ -135,32 +164,109 @@ export async function searchProductsWithPrice(
   maxPrice?: number,
   minPrice?: number,
 ): Promise<Product[]> {
+  const supabase = getSupabaseClient();
+
+  const cleanQuery = cleanSearchQuery(query);
+  console.log("[DB] Price filters:", { minPrice, maxPrice });
+
+  if (!cleanQuery || cleanQuery.length < 2) {
+    console.log(
+      "[DB] Query too short or empty, returning all products with price filter",
+    );
+
+    // Just filter by price if no search term
+    let queryBuilder = supabase.from("products").select("*");
+
+    if (maxPrice !== undefined) {
+      queryBuilder = queryBuilder.lte("price", maxPrice);
+    }
+    if (minPrice !== undefined) {
+      queryBuilder = queryBuilder.gte("price", minPrice);
+    }
+
+    const { data, error } = await queryBuilder
+      .order("price", { ascending: true })
+      .limit(10);
+
+    if (error) {
+      console.error("[DB Error]:", error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  // Try full-text search
   let queryBuilder = supabase
     .from("products")
     .select("*")
-    .textSearch("search_vector", query, {
+    .textSearch("search_vector", cleanQuery, {
       type: "websearch",
       config: "english",
     });
 
-  // Add price filters if provided
+  // Add price filters
   if (maxPrice !== undefined) {
     queryBuilder = queryBuilder.lte("price", maxPrice);
   }
-
   if (minPrice !== undefined) {
     queryBuilder = queryBuilder.gte("price", minPrice);
   }
 
   const { data, error } = await queryBuilder
-    .order("price", { ascending: true }) // Cheapest first
+    .order("price", { ascending: true })
     .limit(10);
 
   if (error) {
-    console.error("[DB Error] searchProductsWithPrice:", error);
+    console.error("[DB Error] Full-text search:", error);
+    // Fallback to ILIKE
+    return searchProductsWithPriceFallback(cleanQuery, maxPrice, minPrice);
+  }
+
+  // If no results, try fallback
+  if (!data || data.length === 0) {
+    console.log("[DB] Full-text returned 0, trying fallback ILIKE");
+    return searchProductsWithPriceFallback(cleanQuery, maxPrice, minPrice);
+  }
+
+  console.log(`[DB] Found ${data.length} products`);
+  return data;
+}
+
+/**
+ * Fallback: Simple pattern matching search
+ */
+async function searchProductsWithPriceFallback(
+  query: string,
+  maxPrice?: number,
+  minPrice?: number,
+): Promise<Product[]> {
+  const supabase = getSupabaseClient();
+
+  let queryBuilder = supabase
+    .from("products")
+    .select("*")
+    .or(
+      `name.ilike.%${query}%,description.ilike.%${query}%,brand.ilike.%${query}%,category.ilike.%${query}%`,
+    );
+
+  if (maxPrice !== undefined) {
+    queryBuilder = queryBuilder.lte("price", maxPrice);
+  }
+  if (minPrice !== undefined) {
+    queryBuilder = queryBuilder.gte("price", minPrice);
+  }
+
+  const { data, error } = await queryBuilder
+    .order("price", { ascending: true })
+    .limit(10);
+
+  if (error) {
+    console.error("[DB Error] Fallback:", error);
     return [];
   }
 
+  console.log(`[DB] Fallback found ${data?.length || 0} products`);
   return data || [];
 }
 
