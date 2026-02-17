@@ -4,7 +4,8 @@
 import { useState, useRef, useEffect } from "react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
-import { Message } from "@/types";
+import { ProductCard } from "./ProductCard";
+import { Message, Product } from "@/types";
 
 export function ChatContainer() {
   const [messages, setMessages] = useState<Message[]>([
@@ -83,14 +84,27 @@ export function ChatContainer() {
     <div className="flex flex-col h-150 mx-auto max-w-4xl border rounded-lg shadow-lg">
       {/* Header */}
       <div className="bg-blue-600 text-white p-4 rounded-t-lg">
-        <h2 className="text-xl font-bold">Shop Assist AI</h2>
-        <p className="text-sm opacity-90">Powered by Grok</p>
+        <h2 className="text-xl font-bold">ShopAssist AI</h2>
+        <p className="text-sm opacity-90">Powered by Groq ⚡️ + Supabase 🗄️</p>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 bg-white dark:bg-gray-200">
         {messages.map((message) => (
-          <ChatMessage key={message.id} message={message} />
+          <div key={message.id}>
+            <ChatMessage message={message} />
+
+            {/* Show products if available */}
+            {message.products && message.products.length > 0 && (
+              <div className="mb-4 ml-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {message.products.map((product) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         ))}
       </div>
 
