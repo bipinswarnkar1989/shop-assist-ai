@@ -27,8 +27,13 @@ export function getSupabaseClient() {
   }
 
   // Get credentials from environment variables
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    "https://rmdnnsdyyequglbixocw.supabase.co";
+  const supabaseKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJtZG5uc2R5eWVxdWdsYml4b2N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyODI1NDgsImV4cCI6MjA4Njg1ODU0OH0.uLgD_JJ7YWtzQrdlNUOm9cH5NHZEgX-QFN7M_oQb2EQ";
+
   // Safety check (good practice)
   if (!supabaseUrl || !supabaseKey) {
     throw new Error("Missing Supabase credentials in .env.local");

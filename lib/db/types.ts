@@ -121,6 +121,26 @@ export interface Database {
           updated_at?: string;
         };
       };
+      Functions: {
+        match_products: {
+          Args: {
+            query_embedding: number[];
+            match_threshold: number;
+            match_count: number;
+          };
+          Returns: Database["public"]["Tables"]["products"]["Row"][];
+        };
+        match_products_with_price: {
+          Args: {
+            query_embedding: number[];
+            match_threshold: number;
+            match_count: number;
+            min_price: number;
+            max_price: number;
+          };
+          Returns: Database["public"]["Tables"]["products"]["Row"][];
+        };
+      };
     };
   };
 }

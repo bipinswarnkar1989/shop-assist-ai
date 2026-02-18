@@ -7,6 +7,8 @@ import {
   searchProductsWithPrice,
   formatProductsForLLM,
   Product,
+  semanticSearchProductsWithPrice,
+  semanticSearchProducts,
 } from "@/lib/db/products";
 import { z } from "zod";
 
@@ -226,19 +228,20 @@ export async function POST(req: NextRequest) {
       const priceRange = extractPriceRange(message);
       console.log("[Chat API] 💰 Price filter:", priceRange);
 
-      // ===== STEP 4: Search Products =====
+      // ===== STEP 4: SEMANTIC SEARCH =====
       let products: Product[];
 
       if (priceRange.maxPrice || priceRange.minPrice) {
         // Search with price filter
-        products = await searchProductsWithPrice(
+        products = await semanticSearchProductsWithPrice(
           query,
           priceRange.maxPrice,
           priceRange.minPrice,
         );
       } else {
-        // Regular search
-        products = await searchProducts(query);
+        //  SEMANTIC search
+        console.log("[Chat API] 🎯 Using SEMANTIC search");
+        products = await semanticSearchProducts(query);
       }
 
       foundProducts = products;

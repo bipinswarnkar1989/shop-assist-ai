@@ -10,12 +10,129 @@
 // ✅ NEW (works everywhere):
 import { getSupabaseClient } from "./supabase";
 import { Database } from "./types";
+import { createEmbedding } from "../ai/embeddings";
+import { MatchProductsParams, MatchProductsWithPriceParams } from "./rpc-types";
 
 // Type for Product (matches database row)
 export type Product = Database["public"]["Tables"]["products"]["Row"];
 
 // Then in each function, use:
 const supabase = getSupabaseClient();
+
+/**
+ * SEMANTIC SEARCH - Layer 3!
+ *
+ * WHAT: Search by meaning, not just keywords
+ * WHY: "portable work computer" finds laptops even without word "laptop"
+ * HOW: Convert query to embedding, find similar product embeddings
+ *
+ * Example:
+ * Query: "I need something for coding on the go"
+ * → Finds: Laptops (understands "coding on the go" = portable laptop)
+ */
+export async function semanticSearchProducts(
+  query: string,
+  limit: number = 10,
+): Promise<Product[]> {
+  const supabase = getSupabaseClient();
+
+  console.log("[Vector Search] Query:", query);
+
+  try {
+    // Step 1: Convert query to embedding
+    const queryEmbedding = await createEmbedding(query);
+    console.log(
+      `[Vector Search] Created query embedding (${queryEmbedding.length} dims)`,
+    );
+
+    // Lower threshold for complex/long queries
+    const threshold = query.split(" ").length > 5 ? 0.2 : 0.3; // ← Changed this
+    console.log(`[Vector Search] Using threshold: ${threshold}`);
+
+    const params: MatchProductsParams = {
+      query_embedding: queryEmbedding,
+      match_threshold: threshold, // ← Use dynamic threshold,
+      match_count: limit,
+    };
+
+    // Step 2: Find similar products using cosine similarity
+    // PostgreSQL pgvector syntax: embedding <=> '[...]'
+    const { data, error } = await (supabase.rpc as any)(
+      "match_products",
+      params,
+    );
+
+    if (error) {
+      console.error("[Vector Search] Error:", error);
+      throw error;
+    }
+
+    console.log(`[Vector Search] Found ${data?.length || 0} similar products`);
+    return data || [];
+  } catch (error) {
+    console.error("[Vector Search] Failed:", error);
+    // Fallback to regular search
+    console.log("[Vector Search] Falling back to keyword search");
+    return searchProducts(query);
+  }
+}
+
+/**
+ * Semantic search with price filtering
+ * Combines vector search + budget constraints
+ */
+export async function semanticSearchProductsWithPrice(
+  query: string,
+  maxPrice?: number,
+  minPrice?: number,
+  limit: number = 10,
+): Promise<Product[]> {
+  const supabase = getSupabaseClient();
+
+  console.log("[Vector Search] Query:", query);
+  console.log("[Vector Search] Price range:", { minPrice, maxPrice });
+
+  try {
+    const queryEmbedding = await createEmbedding(query);
+
+    // Lower threshold for complex queries
+    const threshold = query.split(" ").length > 5 ? 0.2 : 0.3;
+    console.log(`[Vector Search] Using threshold: ${threshold}`);
+
+    const params: MatchProductsWithPriceParams = {
+      query_embedding: queryEmbedding,
+      match_threshold: threshold, // ← Use dynamic threshold
+      match_count: limit,
+      min_price: minPrice || 0,
+      max_price: maxPrice || 999999,
+    };
+
+    const { data, error } = await (supabase.rpc as any)(
+      "match_products_with_price",
+      params,
+    );
+
+    // const { data, error } = await supabase.rpc("match_products_with_price", {
+    //   query_embedding: queryEmbedding,
+    //   match_threshold: 0.3,
+    //   match_count: limit,
+    //   min_price: minPrice || 0,
+    //   max_price: maxPrice || 999999,
+    // });
+
+    if (error) {
+      console.error("[Vector Search] Error:", error);
+      throw error;
+    }
+
+    console.log(`[Vector Search] Found ${data?.length || 0} products`);
+    return data || [];
+  } catch (error) {
+    console.error("[Vector Search] Failed:", error);
+    // Fallback to keyword search with price
+    return searchProductsWithPrice(query, maxPrice, minPrice);
+  }
+}
 
 /**
  * Get all products
